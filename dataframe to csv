@@ -1,0 +1,38 @@
+import pandas as pd
+import yfinance as yf # YAHOO FINANCE API FOR RETRIEVING STOCK INFORMATION
+
+###### TO EDIT
+start_date = '2022-09-30'
+end_date = '2022-10-06' # YFINANCE PROVIDES MINUTE DATA FOR MAX. 1 WEEK
+this_month = 'Oct' # FOLDER OF THE CSV FILE TO BE CREATED
+this_week = 'week1' # SUBFOLDER OF THE CSV FILE TO BE CREATED
+path = "C:/korean/list.csv" # LIST OF STOCKS WE WANT TO SEE
+
+###### THE CODES :
+
+df = pd.read_csv(path, names=['symbols', 'name']) # READ THE STOCK LIST
+
+# df = df.drop('name', axis=1)
+
+for i in df['symbols']:
+    i = i + '.ks' # KOREAN STOCKS HAVE .KS EXTENSION ON YAHOO FINANCE
+
+    try:
+        data = yf.download(i, start=start_date, end=end_date, interval="1m")
+
+        data.reset_index(inplace=True)
+
+        df = pd.DataFrame()
+        df['datetime'] = data['Datetime']
+        df['open'] = data['Open']
+        df['high'] = data['High']
+        df['low'] = data['Low']
+        df['close'] = data['Adj Close']
+        df['volume'] = data['Volume']
+
+        # print(df)
+
+        df.to_csv("C:/KoreanStocks/" + this_month + "/" + this_week + "/" + i + ".csv", index=False)
+
+    except:
+        print(i)
