@@ -1,0 +1,34 @@
+import os
+import pandas as pd
+import psycopg2
+
+def make_batch_list(arg_list: list, size: int):
+    final = [arg_list[i * size:(i + 1) * size] for i in range((len(arg_list) + size - 1) // size)]
+    return final
+
+db = psycopg2.connect(dbname='postgresql', user='', password='', host='', port='') # DB CONNECTION FOR POSTGRESQL USING PSYCOPG2
+curs = db.cursor()
+db.autocommit = True
+
+path = "C:/files/"
+for file in os.listdir(path): # SELECTING FILES INSIDE A FOLDER
+    df = pd.read_csv(path + file, names=['datetime','open','high','low','close', 'volume'])
+
+    df['datetime'] = df['datetime'] + "-5" # INSERTING TIMEZONE FOR POSTGRESQL DATABASE
+
+    symbol = file.split('_', 1)[0]
+    df['symbol'] = symbol # CREATING A COLUMN USING THE FILE NAME
+
+    data_set = list(df.itertuples(index=False, name=None))
+
+    batch_size = 1000
+    batch_list = make_batch_list(data_set, batch_size) # DIVIDING UP DATASET IN BATCHES OF 1000 TO PREPARE AGAINST CONNECTION FAIL 
+
+    for idx, batch in enumerate(batch_list):
+        args_str = ','.join(curs.mogrify("(%s,%s,%s,%s,%s,%s,%s)", x).decode('utf-8') for x in batch)
+
+        sql = "INSERT INTO TABLE (datetime, open, high, low, close, volume, symbol) VALUES " + args_str + " on conflict(symbol, datetime) do update SET symbol = EXCLUDED.symbol, datetime = EXCLUDED.datetime, open = EXCLUDED.open, high = EXCLUDED.high, low = EXCLUDED.low, close = EXCLUDED.close, volume = EXCLUDED.volume"
+        curs.execute(sql)
+
+
+curs.close()
