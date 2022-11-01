@@ -1,0 +1,55 @@
+import time
+from datetime import datetime
+import pandas as pd
+from matplotlib import pyplot
+from matplotlib.animation import FuncAnimation
+import psycopg2
+
+##### CONNECTION TO POSTGRESQL SERVER USING PSYCOPG2
+
+try:
+    db = psycopg2.connect(dbname='postgresql', user='', password='', host='', port='')
+    curs = db.cursor()
+    db.autocommit = True
+except:
+    print('failed to connect')
+
+figure = pyplot.figure()
+
+x_data, y_data = [], [] # WE WILL APPEND STOCK PRICES TO LIST
+line, = pyplot.plot_date(x_data, y_data, '-')
+
+x_dot, y_dot = [], [] # WE WILL PLOT "BUY" WITH RED
+dot, = pyplot.plot_date(x_dot, y_dot, 'ro')
+
+x_dot2, y_dot2 = [], [] # WE WILL PLOT "SELL" WITH BLUE
+dot2, = pyplot.plot_date(x_dot2, y_dot2, 'bo')
+
+def update(frame):
+    curs.execute("SELECT open, datetime FROM TABLE A ORDER BY datetime DESC LIMIT 1") # GETTING DATA
+    x = list(curs.fetchall())
+    
+    x_data.append(datetime.now())
+    y_data.append(x[1])
+    
+    curs.execute("SELECT price, code FROM TABLE B WHERE datetime == %s", (x[0]))
+    x = list(curs.fetchall())
+
+    if len(x) > 0:
+        if x[1] == 1: # BUY
+            x_dot.append(datetime.now())
+            y_dot.append(float(point['Price']))
+        else: # SELL
+            x_dot2.append(datetime.now())
+            y_dot2.append(float(point['Price']))
+      
+        dot.set_data(x_dot, y_dot)
+        dot2.set_data(x_dot2, y_dot2)
+
+    line.set_data(x_data, y_data)
+    figure.gca().relim()
+    figure.gca().autoscale_view()
+    return line, dot, dot2
+
+animation = FuncAnimation(figure, update, interval=1000)
+pyplot.show()
