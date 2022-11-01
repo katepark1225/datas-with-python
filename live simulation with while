@@ -1,0 +1,108 @@
+import datetime
+import time
+import numpy as np
+import pandas as pd
+import psycopg2
+from csv import writer
+
+##### CONNECTING TO POSTGRESQL DATABASE USING PSYCOPG2 
+
+try:
+    db = psycopg2.connect(dbname='postgresql', user='', password='', host='', port='')
+    curs = db.cursor()
+    db.autocommit = True
+except:
+    print('failed to connect')
+
+##### LOGGING ACTIVITY INTO LOCAL FILE
+
+def saveCSV(List, row):
+    with open('C:/files/log.csv', 'a') as f_object:
+        writer_object = writer(f_object)
+        writer_object.writerow(List)
+        f_object.close()
+        
+    ##### INSERTING ACTIVITY INTO SERVER
+
+    now = datetime.datetime.now()
+    now = now.strftime('%Y-%m-%d %H:%M:%S') # DATETIME
+
+    for i in range(0, len(List)): # INSERTING 1 FOR "BUY" AND -1 FOR "SELL"
+        if i == (len(List) - 1):
+            if str(List[i]) == "BUY":
+                code = 1
+            else:
+                code = -1
+
+    curs.execute(
+        "INSERT INTO TABLE (symbol, request_time, datetime, price, code, status, request_volume, positive_volume, account_number)"
+        " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        (row['Symbol'].to_string(index=False), now, row['Datetime'].to_string(index=False), float(pd.to_numeric(row['Open'])), code, 1, 1, 0, '0000000'))
+
+    return
+
+# A BASIC DONCHIAN CHANNEL INDEX
+
+def calcDonchianChannels(dc, period: int):
+    dc["upperDon"] = dc["High"].rolling(period).max()
+    dc["lowerDon"] = dc["Low"].rolling(period).min()
+    dc["midDon"] = (dc["upperDon"] + dc["lowerDon"]) / 2
+    return dc
+
+def buy(row):
+    print("-------BUY-------")
+    print("Datetime : ")
+    print(row['Datetime'].to_string(index=False))
+    print("Cost : ")
+    print(float(pd.to_numeric(row['Open'])))
+
+    List = [row['Symbol'].to_string(index=False), row['Datetime'].to_string(index=False), float(pd.to_numeric(row['Open'])), "BUY"]
+    saveCSV(List, row)
+
+    return
+
+def sell(row):
+    print("-------SELL-------")
+    print("Datetime : ")
+    print(row['Datetime'].to_string(index=False))
+    print("Cost : ")
+    print(float(pd.to_numeric(row['Open'])))
+
+    List = [row['Symbol'].to_string(index=False), row['Datetime'].to_string(index=False), float(pd.to_numeric(row['Open'])), "SELL"]
+    saveCSV(List, row)
+
+    return
+
+def stop_trade():
+    return
+    
+stock = 'GC' # STOCK TICKER
+
+now = datetime.datetime.now()
+tomorrow = now + datetime.timedelta(days=1)
+
+now = now.strftime("%Y-%m-%d %H:%M:%S")
+tomorrow = tomorrow.strftime("%Y-%m-%d %H:%M:%S") # WHEN THE SIMULATION WILL END
+
+df_stock = pd.DataFrame(columns=['Symbol', 'Datetime', 'Open', 'High', 'Low', 'Close', 'Volume', 'upperDon', 'midDon', 'lowerDon']) # CREATING A DATAFRAME
+
+#################### THE LOOP :
+
+while now < tomorrow:
+    curs.execute("SELECT * FROM TABLE WHERE symbol = %s ORDER BY datetime DESC LIMIT 1", (stock,)) # FETCHING STOCK DATA
+    x = list(curs.fetchall())
+
+    df_stock.loc[len(df_stock)] = [x[0], x[1], x[2], x[3], x[4], x[5], x[6], np.nan, np.nan, np.nan] # INSERTING NEW ROWS TO DATAFRAME
+
+    dc = calcDonchianChannels(df_stock, 10) # A BASIC INDEX
+        
+    row = dc.tail(1)
+        
+    if (row['Sum'] > row['midDon']).any(): # A BASIC STRATEGY
+        sell(row)
+    else if (row['Sum'] < row['midDon']).any():
+        buy(row)
+                
+    time.sleep(1)
+    now = datetime.datetime.now()
+    now = now.strftime("%Y-%m-%d %H:%M:%S")
